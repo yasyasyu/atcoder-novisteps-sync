@@ -32,6 +32,9 @@ AtCoder での AC 状況を、[AtCoder NoviSteps](https://atcoder-novisteps.verc
    ![GitHubからZIPでダウンロードする](images/01_github_download.png)
 
 2. `content.js` の冒頭にある `const USER_ID = "あなたのID";` を、**自分の AtCoder ID に書き換えて保存してください（この手順を忘れると正常に動作しません）。**
+
+   ![あなたのIDを入力する](<images/03_input _USER_ID.png>)
+
 3. Chrome で `chrome://extensions/` を開きます。
 4. 「デベロッパーモード」を ON にし、「パッケージ化されていない拡張機能を読み込む」からフォルダを選択してください。
 
