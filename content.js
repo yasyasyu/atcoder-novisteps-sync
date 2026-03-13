@@ -1,52 +1,59 @@
 (async function () {
   "use strict";
 
-  const USER_ID = ""; // ここに AtCoder ID を入力
+  const USER_ID = "kuruton3910"; // ここに AtCoder ID を入力
   const STORAGE_KEY = `synced_ids_${USER_ID}`;
+  const SYNC_RESULT_KEY = "sync_result";
+  const TOAST_DURATION_MS = 4000;
+  const TOAST_FADE_DURATION_MS = 250;
+  const TOAST_RELOAD_DELAY_MS = 500;
+  const REQUEST_DELAY_BASE_MS = 250;
+  const REQUEST_DELAY_JITTER_MS = 100;
+  const PROBLEMS_UPDATE_PATH = "/problems?/update";
+  const ATCODER_SUBMISSIONS_API =
+    "https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions";
 
-  // ========================================
-  // スタイルの注入
-  // ========================================
-  function injectStyles() {
-    if (document.getElementById("ns-styles")) return;
-    const style = document.createElement("style");
-    style.id = "ns-styles";
-    style.textContent = `
-      @keyframes ns-slide-up {
-        from { opacity: 0; transform: translateY(12px); }
-        to   { opacity: 1; transform: translateY(0); }
-      }
-      @keyframes ns-fade-out {
-        from { opacity: 1; transform: translateY(0); }
-        to   { opacity: 0; transform: translateY(-8px); }
-      }
-      @keyframes ns-btn-appear {
-        from { opacity: 0; transform: translateY(16px) scale(0.96); }
-        to   { opacity: 1; transform: translateY(0) scale(1); }
-      }
-      #ns-sync-btn {
-        animation: ns-btn-appear 0.3s ease;
-      }
-      #ns-sync-btn:not(:disabled):hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3) !important;
-      }
-      #ns-sync-btn:not(:disabled):active {
-        transform: translateY(0);
-      }
-      #ns-sync-progress {
-        display: block;
-        width: 0%;
-        height: 3px;
-        background: rgba(255, 255, 255, 0.5);
-        border-radius: 0 0 10px 10px;
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        transition: width 0.3s ease;
-      }
-    `;
-    document.head.appendChild(style);
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const getSyncDelayMs = () =>
+    REQUEST_DELAY_BASE_MS + Math.random() * REQUEST_DELAY_JITTER_MS;
+
+  function createSyncRequestBody(problemId) {
+    const formData = new FormData();
+    formData.append("taskId", problemId);
+    formData.append("submissionStatus", "ac");
+    return formData;
+  }
+
+  function getAcceptedProblemIds(submissions) {
+    return [
+      ...new Set(
+        submissions
+          .filter((item) => item.result === "AC")
+          .map((item) => item.problem_id),
+      ),
+    ];
+  }
+
+  async function fetchAcceptedProblemIds(userId) {
+    const response = await fetch(
+      `${ATCODER_SUBMISSIONS_API}?user=${encodeURIComponent(userId)}&from_second=0`,
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch submissions: ${response.status}`);
+    }
+
+    const submissions = await response.json();
+    return getAcceptedProblemIds(submissions);
+  }
+
+  async function syncProblem(problemId) {
+    return fetch(PROBLEMS_UPDATE_PATH, {
+      method: "POST",
+      body: createSyncRequestBody(problemId),
+      headers: { "x-sveltekit-action": "true" },
+    });
   }
 
   // ========================================
@@ -56,32 +63,16 @@
     const old = document.getElementById("ns-toast");
     if (old) old.remove();
 
-    const colors = {
-      success: { bg: "#ecfdf5", border: "#86efac", text: "#065f46" },
-      error: { bg: "#fef2f2", border: "#fca5a5", text: "#991b1b" },
-      info: { bg: "#f0f9ff", border: "#93c5fd", text: "#1e40af" },
-    };
-    const c = colors[type] || colors.info;
-
     const el = document.createElement("div");
     el.id = "ns-toast";
+    el.className = `ns-toast ns-toast-${type || "info"}`;
     el.textContent = message;
-    el.style.cssText = `
-      position: fixed; bottom: 80px; right: 24px; z-index: 999998;
-      padding: 12px 20px; max-width: 320px;
-      background: ${c.bg}; color: ${c.text};
-      border: 1px solid ${c.border}; border-radius: 10px;
-      font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
-      font-size: 13px; line-height: 1.7; white-space: pre-line;
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-      animation: ns-slide-up 0.25s ease;
-    `;
     document.body.appendChild(el);
 
     setTimeout(() => {
-      el.style.animation = "ns-fade-out 0.25s ease forwards";
-      setTimeout(() => el.remove(), 250);
-    }, 4000);
+      el.style.animation = `ns-fade-out ${TOAST_FADE_DURATION_MS}ms ease forwards`;
+      setTimeout(() => el.remove(), TOAST_FADE_DURATION_MS);
+    }, TOAST_DURATION_MS);
   }
 
   // ========================================
@@ -90,67 +81,37 @@
   function showConfirm(message) {
     return new Promise((resolve) => {
       const overlay = document.createElement("div");
-      overlay.style.cssText = `
-        position: fixed; inset: 0; z-index: 1000000;
-        background: rgba(0, 0, 0, 0.25); backdrop-filter: blur(2px);
-        display: flex; align-items: center; justify-content: center;
-        animation: ns-slide-up 0.2s ease;
-      `;
+      overlay.className = "ns-confirm-overlay";
 
       const card = document.createElement("div");
-      card.style.cssText = `
-        background: #fff; border-radius: 14px; padding: 28px 32px;
-        max-width: 340px; width: 88%; text-align: center;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
-      `;
+      card.className = "ns-confirm-card";
 
       const msg = document.createElement("p");
       msg.textContent = message;
-      msg.style.cssText = `
-        margin: 0 0 22px; font-size: 14px; line-height: 1.8;
-        color: #374151; white-space: pre-line;
-      `;
+      msg.className = "ns-confirm-message";
 
       const btnRow = document.createElement("div");
-      btnRow.style.cssText =
-        "display: flex; gap: 10px; justify-content: center;";
+      btnRow.className = "ns-confirm-actions";
 
       const makeBtn = (text, primary) => {
         const b = document.createElement("button");
         b.textContent = text;
-        b.style.cssText = `
-          padding: 9px 26px; border-radius: 8px; font-size: 13px;
-          font-weight: 600; cursor: pointer; border: none;
-          transition: background 0.15s ease;
-          font-family: inherit;
-          ${
-            primary
-              ? "background: #22c55e; color: #fff;"
-              : "background: #f3f4f6; color: #6b7280;"
-          }
-        `;
-        if (primary) {
-          b.onmouseover = () => (b.style.background = "#16a34a");
-          b.onmouseleave = () => (b.style.background = "#22c55e");
-        } else {
-          b.onmouseover = () => (b.style.background = "#e5e7eb");
-          b.onmouseleave = () => (b.style.background = "#f3f4f6");
-        }
+        b.className = `ns-confirm-btn ${
+          primary ? "ns-confirm-btn-primary" : "ns-confirm-btn-secondary"
+        }`;
         return b;
+      };
+
+      const close = (result) => {
+        overlay.remove();
+        resolve(result);
       };
 
       const cancelBtn = makeBtn("やめておく", false);
       const okBtn = makeBtn("同期する", true);
 
-      cancelBtn.onclick = () => {
-        overlay.remove();
-        resolve(false);
-      };
-      okBtn.onclick = () => {
-        overlay.remove();
-        resolve(true);
-      };
+      cancelBtn.addEventListener("click", () => close(false));
+      okBtn.addEventListener("click", () => close(true));
 
       btnRow.append(cancelBtn, okBtn);
       card.append(msg, btnRow);
@@ -162,18 +123,23 @@
   // ========================================
   // リロード後の通知
   // ========================================
-  const syncResult = sessionStorage.getItem("sync_result");
+  const syncResult = sessionStorage.getItem(SYNC_RESULT_KEY);
   if (syncResult) {
-    sessionStorage.removeItem("sync_result");
-    setTimeout(() => showToast(syncResult, "success"), 500);
+    sessionStorage.removeItem(SYNC_RESULT_KEY);
+    setTimeout(() => showToast(syncResult, "success"), TOAST_RELOAD_DELAY_MS);
   }
 
   // ========================================
   // 同期済みリストの読み書き
   // ========================================
   const getSyncedIds = () => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? new Set(JSON.parse(raw)) : new Set();
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      return new Set();
+    }
   };
 
   const saveSyncedIds = (idSet) => {
@@ -185,7 +151,6 @@
   // ========================================
   function injectSyncButton() {
     if (document.getElementById("ns-sync-btn") || !document.body) return;
-    injectStyles();
 
     const btn = document.createElement("button");
     btn.id = "ns-sync-btn";
@@ -198,33 +163,21 @@
     progress.id = "ns-sync-progress";
 
     btn.append(label, progress);
-    btn.style.cssText = `
-      position: fixed; bottom: 24px; right: 24px; z-index: 999999;
-      padding: 11px 24px; background: #5cb88A; color: #fff;
-      border: none; border-radius: 10px; cursor: pointer;
-      font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
-      font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
-      box-shadow: 0 2px 10px rgba(34, 197, 94, 0.18);
-      transition: all 0.2s ease;
-      overflow: hidden;
-    `;
 
     function resetBtn() {
       label.textContent = "AC を同期";
       btn.disabled = false;
-      btn.style.cursor = "pointer";
-      btn.style.opacity = "1";
+      btn.classList.remove("ns-busy");
       progress.style.width = "0%";
     }
 
     function setBusy(text) {
       btn.disabled = true;
-      btn.style.cursor = "wait";
-      btn.style.opacity = "0.85";
+      btn.classList.add("ns-busy");
       label.textContent = text;
     }
 
-    btn.onclick = async () => {
+    btn.addEventListener("click", async () => {
       if (!USER_ID) {
         showToast(
           "AtCoder ID が設定されていません。\ncontent.js の USER_ID を確認してください。",
@@ -236,17 +189,7 @@
       setBusy("確認中…");
 
       try {
-        const acRes = await fetch(
-          `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${encodeURIComponent(USER_ID)}&from_second=0`,
-        );
-        const submissions = await acRes.json();
-        const allAcIds = [
-          ...new Set(
-            submissions
-              .filter((s) => s.result === "AC")
-              .map((s) => s.problem_id),
-          ),
-        ];
+        const allAcIds = await fetchAcceptedProblemIds(USER_ID);
 
         const syncedIds = getSyncedIds();
         const tasksToSync = allAcIds.filter((id) => !syncedIds.has(id));
@@ -268,15 +211,7 @@
         let successCount = 0;
         for (let i = 0; i < tasksToSync.length; i++) {
           const pid = tasksToSync[i];
-          const formData = new FormData();
-          formData.append("taskId", pid);
-          formData.append("submissionStatus", "ac");
-
-          const response = await fetch("/problems?/update", {
-            method: "POST",
-            body: formData,
-            headers: { "x-sveltekit-action": "true" },
-          });
+          const response = await syncProblem(pid);
 
           if (response.ok) {
             successCount++;
@@ -286,13 +221,13 @@
           const pct = Math.round(((i + 1) / tasksToSync.length) * 100);
           label.textContent = `同期中… ${i + 1} / ${tasksToSync.length}`;
           progress.style.width = `${pct}%`;
-          await new Promise((r) => setTimeout(r, 500 + Math.random() * 200));
+          await wait(getSyncDelayMs());
         }
 
         saveSyncedIds(syncedIds);
 
         sessionStorage.setItem(
-          "sync_result",
+          SYNC_RESULT_KEY,
           `同期が完了しました！\n${successCount} 問を追加しました`,
         );
         location.reload();
@@ -304,10 +239,9 @@
         );
         label.textContent = "もう一度試す";
         btn.disabled = false;
-        btn.style.cursor = "pointer";
-        btn.style.opacity = "1";
+        btn.classList.remove("ns-busy");
       }
-    };
+    });
 
     document.body.appendChild(btn);
   }

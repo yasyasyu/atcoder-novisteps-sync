@@ -8,6 +8,7 @@
         "https://atcoder-novisteps.vercel.app/workbooks/*",
         "https://atcoder-novisteps.vercel.app/problems*"
       ],
+      "css": ["content.css"],
       "js": ["content.js"]
     }
   ],
