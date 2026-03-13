@@ -28,9 +28,14 @@ AtCoder での AC 状況を、[AtCoder NoviSteps](https://atcoder-novisteps.verc
 ## 使い方（デベロッパーモードでの導入）
 
 1. このリポジトリを ZIP でダウンロードし、解凍します。
+
+   ![GitHubからZIPでダウンロードする](images/01_github_download.png)
+
 2. `content.js` の冒頭にある `const USER_ID = "あなたのID";` を、**自分の AtCoder ID に書き換えて保存してください（この手順を忘れると正常に動作しません）。**
 3. Chrome で `chrome://extensions/` を開きます。
 4. 「デベロッパーモード」を ON にし、「パッケージ化されていない拡張機能を読み込む」からフォルダを選択してください。
+
+   ![chrome://extensionsで拡張機能を読み込む](images/02_chrome_extensions_menu.png)
 
 > ⚠️ **注意:** `USER_ID` を書き換えずに使用した場合、同期は正常に機能しません。必ず手順2を実行してください。
 
